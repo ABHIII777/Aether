@@ -13,9 +13,20 @@ function createDOMNode(node: AetherNode): Node {
   const element = document.createElement(node.type);
 
   for (const [key, value] of Object.entries(node.props)) {
-    if (value !== null && value !== undefined) {
-      element.setAttribute(key, String(value));
+    if (value === null && value === undefined) {
+      continue;
     }
+
+    if (/^on[A-Z]/.test(key) && typeof value === "function") {
+      const eventName = key.slice(2).toLowerCase();
+      element.addEventListener(eventName, value as EventListener);
+      continue;
+    }
+
+    if (typeof value === "function") {
+      continue;
+    }
+    element.setAttribute(key, String(value));
   }
 
   for (const child of node.children) {
