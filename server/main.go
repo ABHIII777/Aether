@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -24,6 +23,14 @@ func writeJSON(w http.ResponseWriter, status int, data APIResponse) {
 
 func main() {
 	mux := http.NewServeMux()
+
+	db, err := OpenDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	log.Println("Connected to PostgreSQL")
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, APIResponse{
