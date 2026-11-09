@@ -1,4 +1,4 @@
-import type { AetherNode, AetherElement } from "./index.js";
+import type { AetherNode } from "./index.js";
 
 export function render(node: AetherNode, container: HTMLElement): void {
   const domNode = createDOMNode(node);

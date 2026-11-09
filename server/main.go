@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"github.com/joho/godotenv"
 )
 
 type LoginRequest struct {
@@ -23,6 +24,10 @@ func writeJSON(w http.ResponseWriter, status int, data APIResponse) {
 
 func main() {
 	mux := http.NewServeMux()
+
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found. falling back to environment variables.")
+	}
 
 	db, err := OpenDB()
 	if err != nil {
