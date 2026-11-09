@@ -1,36 +1,87 @@
-import { createElement } from "../dist/index.js";
 import { render } from "../dist/dom.js";
+import { createElement } from "../dist/index.js";
 
-const app = createElement(
-  "main",
-  { class: "app" },
-  createElement("h1", {}, "Aether Login"),
-  createElement("label", { for: "email" }, "Email"),
-  createElement("input", {
-    id: "email",
-    name: "email",
-    type: "email",
-    placeholder: "you@example.com",
-    onInput: (event) => {
-      const input = event.target;
-      console.log("Email:", input.value);
+const handleFormSubmit = async (event) => {
+  event.preventDefault();
+
+  const { email, password } = event.currentTarget.elements;
+
+  const response = await fetch("http://localhost:8080/api/login", {
+    method: "POST",
+    headers: {
+      "Content-type": "application/json"
     },
-  }),
-  createElement("Password", { for: "password" }, "Password"),
-  createElement("input", {
-    id: "password",
-    name: "password",
-    tyoe: "password",
-    required: true,
-    placeholder: "Enter your password",
-  }),
-  createElement("button", { type: "submit" }, "Log in"),
-);
+    body: JSON.stringify(
+      {
+        email: email.value,
+        password: password.value
+      }
+    )
+  })
 
-const root = document.getElementById("root");
-
-if (!root) {
-  throw new Error("Aether could not find the root element");
+  console.log(await response.json(), response.status)
 }
 
-render(app, root);
+const app = createElement(
+  "form",
+  { class: "app", onsubmit: handleFormSubmit },
+  createElement("h1", {}, "Login Form"),
+  createElement(
+    "label",
+    {
+      for: "email"
+    },
+    "Email:"
+  ),
+
+  createElement(
+    "input",
+    {
+      id: "email",
+      type: "input",
+      name: "email",
+      placeholder: "Enter your email",
+      required: true,
+    }
+  ),
+
+  createElement("br", {}, ""),
+  createElement("br", {}, ""),
+
+  createElement(
+    "label",
+    {
+      for: "password"
+    },
+    "Password"
+  ),
+
+  createElement(
+    "input",
+    {
+      id: "password",
+      name: "password",
+      type: "password",
+      placeholder: "Enter the password",
+      required: true,
+    },
+  ),
+
+  createElement("br", {}, ""),
+  createElement("br", {}, ""),
+
+  createElement(
+    "button",
+    {
+      type: "submit"
+    },
+    "Log in"
+  )
+)
+
+const root = document.getElementById("root")
+
+if (!root) {
+  throw new Error("Aether could not find the root element...")
+}
+render(app, root)
