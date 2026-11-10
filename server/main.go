@@ -1,10 +1,16 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"strings"
+
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/joho/godotenv"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type LoginRequest struct {
@@ -14,6 +20,7 @@ type LoginRequest struct {
 
 type APIResponse struct {
 	Message string `json:"message"`
+	ID      string `json:"id,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, data APIResponse) {
@@ -23,11 +30,12 @@ func writeJSON(w http.ResponseWriter, status int, data APIResponse) {
 }
 
 func main() {
-	mux := http.NewServeMux()
 
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found. falling back to environment variables.")
 	}
+
+	mux := http.NewServeMux()
 
 	db, err := OpenDB()
 	if err != nil {
@@ -43,27 +51,8 @@ func main() {
 		})
 	})
 
-	mux.HandleFunc("POST /api/login", func(w http.ResponseWriter, r *http.Request) {
-		var request LoginRequest
-
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			writeJSON(w, http.StatusBadRequest, APIResponse{
-				Message: "Invalid JSON request",
-			})
-			return
-		}
-
-		if request.Email == "" || request.Password == "" {
-			writeJSON(w, http.StatusBadRequest, APIResponse{
-				Message: "Email and password are required",
-			})
-			return
-		}
-
-		writeJSON(w, http.StatusNotImplemented, APIResponse{
-			Message: "Authentication is not implemented yet",
-		})
-	})
+	mux.HandleFunc("POST /api/register", handleRegister(db))
+	mux.HandleFunc("POST /api/login", handleLogin(db))
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4173")
@@ -82,5 +71,125 @@ func main() {
 
 	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func handleRegister(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var request LoginRequest
+
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			writeJSON(w, http.StatusBadRequest, APIResponse{
+				Message: "Invalid JSON request",
+			})
+			return
+		}
+
+		if request.Email == "" || request.Password == "" {
+			writeJSON(w, http.StatusBadRequest, APIResponse{
+				Message: "Missing Credentials",
+			})
+			return
+		}
+
+		hashedPassword, err := bcrypt.GenerateFromPassword(
+			[]byte(request.Password),
+			bcrypt.DefaultCost,
+		)
+
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, APIResponse{
+				Message: "Error while hashing the password",
+			})
+			return
+		}
+
+		var userID string
+
+		err = db.QueryRowContext(
+			r.Context(),
+			`
+		INSERT INTO users(email, password)
+		VALUES (lower($1), $2)
+		RETURNING id::text
+	`, strings.TrimSpace(request.Email), string(hashedPassword)).Scan(
+			&userID,
+		)
+
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				writeJSON(w, http.StatusConflict, APIResponse{
+					Message: "Email already registered",
+				})
+				return
+			}
+
+			writeJSON(w, http.StatusInternalServerError, APIResponse{
+				Message: "Failed to create user",
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusCreated, APIResponse{
+			Message: "User created successfully",
+			ID:      userID,
+		})
+	}
+}
+
+func handleLogin(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var request LoginRequest
+		var userID, hash string
+
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			writeJSON(w, http.StatusBadRequest, APIResponse{
+				Message: "Invalid JSON Request",
+			})
+			return
+		}
+
+		if request.Email == "" || request.Password == "" {
+			writeJSON(w, http.StatusBadRequest, APIResponse{
+				Message: "Invalid Credentials",
+			})
+			return
+		}
+
+		err := db.QueryRowContext(
+			r.Context(),
+			`
+			SELECT id::text, password 
+			FROM users
+			WHERE lower(email) = lower($1)
+			`, strings.TrimSpace(request.Email)).Scan(&userID, &hash)
+
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, http.StatusUnauthorized, APIResponse{
+				Message: "Invalid Email or Password",
+			})
+			return
+		}
+
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, APIResponse{
+				Message: "Internal Server Error",
+			})
+			return
+		}
+
+		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(request.Password)) != nil {
+			writeJSON(w, http.StatusUnauthorized, APIResponse{
+				Message: "Invalid Email or Password",
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, APIResponse{
+			Message: "Logged In",
+			ID:      userID,
+		})
+
 	}
 }
