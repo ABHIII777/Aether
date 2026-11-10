@@ -1,5 +1,6 @@
 import { render } from "../dist/dom.js";
 import { createElement } from "../dist/index.js";
+// test@aether.dev / secret123 -> Dummy credentails for login in
 
 const handleFormSubmit = async (event) => {
   event.preventDefault();
@@ -17,13 +18,19 @@ const handleFormSubmit = async (event) => {
     }),
   });
 
-  console.log(await response.json(), response.status);
+  const data = await response.json()
+
+  document.getElementById("result")?.remove();
+  const result = document.createElement("p");
+  result.id = "result";
+  result.textContent = data.message;
+  document.querySelector(".app")?.appendChild(result);
 };
 
 const app = createElement(
   "form",
-  { class: "app", onsubmit: handleFormSubmit },
-  createElement("h0", {}, "Login Form"),
+  { class: "app", onSubmit: handleFormSubmit },
+  createElement("h1", {}, "Login Form"),
   createElement(
     "label",
     {
@@ -34,7 +41,7 @@ const app = createElement(
 
   createElement("input", {
     id: "email",
-    type: "input",
+    type: "email",
     name: "email",
     placeholder: "Enter your email",
     required: true,
