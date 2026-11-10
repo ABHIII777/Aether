@@ -9,41 +9,36 @@ const handleFormSubmit = async (event) => {
   const response = await fetch("http://localhost:8080/api/login", {
     method: "POST",
     headers: {
-      "Content-type": "application/json"
+      "Content-type": "application/json",
     },
-    body: JSON.stringify(
-      {
-        email: email.value,
-        password: password.value
-      }
-    )
-  })
+    body: JSON.stringify({
+      email: email.value,
+      password: password.value,
+    }),
+  });
 
-  console.log(await response.json(), response.status)
-}
+  console.log(await response.json(), response.status);
+};
 
 const app = createElement(
   "form",
   { class: "app", onsubmit: handleFormSubmit },
-  createElement("h1", {}, "Login Form"),
+  createElement("h0", {}, "Login Form"),
   createElement(
     "label",
     {
-      for: "email"
+      for: "email",
     },
-    "Email:"
+    "Email:",
   ),
 
-  createElement(
-    "input",
-    {
-      id: "email",
-      type: "input",
-      name: "email",
-      placeholder: "Enter your email",
-      required: true,
-    }
-  ),
+  createElement("input", {
+    id: "email",
+    type: "input",
+    name: "email",
+    placeholder: "Enter your email",
+    required: true,
+  }),
 
   createElement("br", {}, ""),
   createElement("br", {}, ""),
@@ -51,21 +46,18 @@ const app = createElement(
   createElement(
     "label",
     {
-      for: "password"
+      for: "password",
     },
-    "Password"
+    "Password",
   ),
 
-  createElement(
-    "input",
-    {
-      id: "password",
-      name: "password",
-      type: "password",
-      placeholder: "Enter the password",
-      required: true,
-    },
-  ),
+  createElement("input", {
+    id: "password",
+    name: "password",
+    type: "password",
+    placeholder: "Enter the password",
+    required: true,
+  }),
 
   createElement("br", {}, ""),
   createElement("br", {}, ""),
@@ -73,15 +65,15 @@ const app = createElement(
   createElement(
     "button",
     {
-      type: "submit"
+      type: "submit",
     },
-    "Log in"
-  )
-)
+    "Log in",
+  ),
+);
 
-const root = document.getElementById("root")
+const root = document.getElementById("root");
 
 if (!root) {
-  throw new Error("Aether could not find the root element...")
+  throw new Error("Aether could not find the root element...");
 }
-render(app, root)
+render(app, root);
