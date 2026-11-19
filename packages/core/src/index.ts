@@ -1,3 +1,5 @@
+export { render } from "./dom.js";
+
 export type AetherText = {
   kind: "text";
   value: string;
@@ -11,7 +13,14 @@ export type AetherElement = {
 };
 
 export type AetherNode = AetherElement | AetherText;
-export type AetherChild = AetherNode | string | number;
+export type AetherChild =
+  | AetherNode
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | AetherChild[];
 
 export function createElement(
   type: string,
@@ -22,15 +31,29 @@ export function createElement(
     kind: "element",
     type,
     props,
-    children: children.map((child): AetherNode => {
-      if (typeof child === "string" || typeof child === "number") {
-        return {
-          kind: "text",
-          value: String(child),
-        };
-      }
-
-      return child;
-    }),
+    children: children.flatMap(normalizeChild),
   };
+}
+
+function normalizeChild(child: AetherChild): AetherNode[] {
+  // Conditional expressions such as `condition && <p />` evaluate to `false`
+  // and should not become children.
+  if (child === null || child === undefined || typeof child === "boolean") {
+    return [];
+  }
+
+  if (typeof child === "string" || typeof child === "number") {
+    return [
+      {
+        kind: "text",
+        value: String(child),
+      },
+    ];
+  }
+
+  if (Array.isArray(child)) {
+    return child.flatMap((nested) => normalizeChild(nested));
+  }
+
+  return [child];
 }
