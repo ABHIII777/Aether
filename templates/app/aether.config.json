@@ -1,0 +1,11 @@
+{
+  "name": "__APP_NAME__",
+  "clientEntry": "client/main.tsx",
+  "clientIndex": "client/index.html",
+  "publicDir": null,
+  "serverDir": "server",
+  "devPort": 3000,
+  "apiPort": 8080,
+  "outDir": "server/assets/dist",
+  "binary": "bin/__APP_NAME__"
+}

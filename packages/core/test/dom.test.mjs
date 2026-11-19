@@ -3,6 +3,16 @@ import assert from "node:assert/strict";
 
 class FakeNode {
   parentNode = null;
+
+  get nextSibling() {
+    if (!this.parentNode) {
+      return null;
+    }
+
+    const siblings = this.parentNode.childNodes;
+    const index = siblings.indexOf(this);
+    return siblings[index + 1] ?? null;
+  }
 }
 
 class FakeText extends FakeNode {
@@ -55,6 +65,10 @@ class FakeElement extends FakeNode {
 
   get textContent() {
     return this.childNodes.map((child) => child.textContent).join("");
+  }
+
+  get firstChild() {
+    return this.childNodes[0] ?? null;
   }
 
   appendChild(child) {
@@ -224,6 +238,119 @@ test("subsequent renders patch changed nodes in place", () => {
   assert.equal(root.childNodes[1], second);
   assert.equal(first.textContent, "ONE");
   assert.equal(second.textContent, "two");
+});
+
+test("text node changes reuse the same text node", () => {
+  const container = makeContainer();
+
+  render(h("p", {}, "before"), container);
+
+  const paragraph = container.firstChild;
+  const text = paragraph.firstChild;
+
+  render(h("p", {}, "after"), container);
+
+  assert.equal(container.firstChild, paragraph);
+  assert.equal(paragraph.firstChild, text);
+  assert.equal(text.nodeValue, "after");
+});
+
+test("nested element type changes replace only that element", () => {
+  const container = makeContainer();
+  const tree = (tag) =>
+    h(
+      "div",
+      {},
+      h("header", {}, "header"),
+      h(tag, { id: "target" }, "body"),
+      h("footer", {}, "footer"),
+    );
+
+  render(tree("p"), container);
+
+  const root = container.firstChild;
+  const header = root.childNodes[0];
+  const previousTarget = root.childNodes[1];
+  const footer = root.childNodes[2];
+
+  render(tree("section"), container);
+
+  assert.equal(container.firstChild, root);
+  assert.equal(root.childNodes[0], header);
+  assert.equal(root.childNodes[2], footer);
+  assert.equal(root.childNodes[1].tagName, "SECTION");
+  assert.equal(root.childNodes[1].getAttribute("id"), "target");
+  assert.notEqual(root.childNodes[1], previousTarget);
+});
+
+test("child nodes are added and removed", () => {
+  const container = makeContainer();
+  const list = (items) => h("ul", {}, ...items.map((text) => h("li", {}, text)));
+
+  render(list(["A", "B"]), container);
+
+  const listElement = container.firstChild;
+
+  render(list(["A", "B", "C"]), container);
+
+  assert.equal(listElement.childNodes.length, 3);
+  assert.equal(listElement.childNodes[2].textContent, "C");
+
+  render(list(["A"]), container);
+
+  assert.equal(listElement.childNodes.length, 1);
+  assert.equal(listElement.textContent, "A");
+});
+
+test("nested child updates preserve surrounding nodes", () => {
+  const container = makeContainer();
+  const tree = (text) =>
+    h(
+      "div",
+      {},
+      h("section", {}, h("p", { class: "a" }, text), h("span", {}, "static")),
+      h("footer", {}, "footer"),
+    );
+
+  render(tree("first"), container);
+
+  const root = container.firstChild;
+  const section = root.childNodes[0];
+  const paragraph = section.childNodes[0];
+  const span = section.childNodes[1];
+  const footer = root.childNodes[1];
+  const text = paragraph.firstChild;
+
+  render(tree("second"), container);
+
+  assert.equal(container.firstChild, root);
+  assert.equal(root.childNodes[0], section);
+  assert.equal(root.childNodes[1], footer);
+  assert.equal(section.childNodes[0], paragraph);
+  assert.equal(section.childNodes[1], span);
+  assert.equal(paragraph.firstChild, text);
+  assert.equal(text.nodeValue, "second");
+});
+
+test("unchanged DOM nodes retain identity when only a sibling changes", () => {
+  const container = makeContainer();
+
+  render(
+    h("div", {}, h("p", {}, "left"), h("p", {}, "right")),
+    container,
+  );
+
+  const previousDOMNode = container.firstChild;
+  const previousLeft = previousDOMNode.childNodes[0];
+
+  render(
+    h("div", {}, h("p", {}, "left"), h("p", {}, "RIGHT")),
+    container,
+  );
+
+  assert.equal(previousDOMNode, container.firstChild);
+  assert.equal(previousLeft, previousDOMNode.childNodes[0]);
+  assert.equal(previousLeft.textContent, "left");
 });
 
 test("props are added, updated and removed", () => {

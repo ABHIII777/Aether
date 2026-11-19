@@ -6,9 +6,14 @@
   "type": "module",
   "packageManager": "pnpm@11.28.8",
   "scripts": {
-    "test": "pnpm -r test"
+    "build": "pnpm -r build",
+    "build:app": "pnpm build && pnpm exec aether build",
+    "dev": "pnpm --filter @aether/cli exec aether dev",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
+    "@aether/cli": "workspace:*",
     "typescript": "^7.0.2"
   }
 }

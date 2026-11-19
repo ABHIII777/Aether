@@ -2,231 +2,478 @@
 
 **A full-stack framework for React-style interfaces and Go backends.**
 
-Aether lets you build web applications with a React-style component model on the
-client and an entirely Go-based backend on the server — no Node in production,
-no JavaScript on the server, one binary to deploy.
-
-> **Status:** pre-alpha. Aether is under active design and is not yet usable for
-> real projects. This README describes the target, not the current state.
-
----
-
-## Why Aether
-
-Today you generally have two choices:
-
-- **React + Node** (Next.js, Remix, NestJS) — an excellent client programming
-  model, but the server is JavaScript, production runs a Node process, and your
-  backend is locked into the JavaScript ecosystem.
-- **Go + SPA boilerplate** — an excellent server language, but a fractured
-  developer experience. You assemble a bundler, a dev proxy, CORS rules, a
-  router, session handling, migrations, and a build pipeline yourself, then keep
-  two deployables in sync forever.
-
-Aether's bet is that you should not have to choose. Keep the programming model
-developers already know — components, props, state, JSX — implement it in a
-small first-party runtime, and pair it with a Go framework designed for the same
-application. One CLI owns development, build, and deployment.
-
-## Our goal
-
-> **One framework, one runtime, one binary.**
->
-> A developer writes a React-style client in TypeScript and a backend in Go,
-> runs one command to start both, and ships a single Go executable that serves
-> the client, the API, and talks to PostgreSQL — with no Node runtime in
-> production.
-
-Concretely, Aether should make this workflow real:
+Aether pairs a small first-party component runtime in TypeScript with a Go
+server framework and one CLI that owns development, builds, and deployment.
+Production is a single Go binary with the client embedded.
 
 ```bash
 aether create myapp
 cd myapp
-aether dev      # client + server on one port
-aether build    # single binary with the client embedded
+aether dev
+aether build
+./bin/myapp
 ```
 
-## The four pillars
+## What v0.1 includes
 
-### 1. A first-party React-style runtime
+- Function components, props, children, and fragments
+- A JSX runtime with automatic `jsxImportSource: "@aether/core"`
+- `useState` and `useEffect` with cleanup
+- Keyed reconciliation that patches the DOM in place
+- `unmount` plus component and effect teardown
+- A history router with `Router`, `Link`, `navigate`, `useLocation`,
+  `useNavigate`, and `matchRoute`
+- Route groups and typed path parameters in Go
+- Middleware chain: request IDs, logging, recovery, CORS, rate limiting
+- JSON decoding, validation, and one consistent error model
+- PostgreSQL-backed cookie sessions and bcrypt password auth
+- SQL migrations with a tracked `schema_migrations` table
+- `aether dev`, `aether build`, and `aether create`
+- Live reload, `/api` proxying, and a single-origin development server
+- Client bundling into one Go binary with `go:embed`
+- Runtime tests, Go tests, and CI
 
-A small, auditable runtime that provides the React programming model without
-depending on React or Preact.
+## Requirements
 
-- Function components with props and children
-- JSX compiled to a `createElement` factory
-- `useState` for local state; effects and memoization later
-- Keyed reconciliation: diff the tree and patch the DOM instead of rebuilding it
-- Event props (`onClick`, `onSubmit`, `onInput`) with predictable normalization
-- Explicit rules, explicit errors — no silently dropped handlers
+- Node.js 22 or newer
+- pnpm 11
+- Go 1.26 or newer
+- PostgreSQL for authentication
 
-### 2. A Go backend framework
+A database is only required when running the server. Client runtime tests do not
+need PostgreSQL.
 
-A server framework designed for the same application, not a bag of handlers.
+## Repository layout
 
-- Router with route groups and typed path parameters
-- Middleware chain: logging, recovery, auth, rate limiting
-- JSON request/response helpers and declarative request validation
-- Cookie-based sessions and password auth (bcrypt), backed by the database
-- Migrations plus a repository/query layer, PostgreSQL first
-- Configuration from environment, with one consistent error model
+```text
+packages/
+  core/       client runtime, JSX runtime, router, and runtime tests
+  cli/        aether dev, aether build, and aether create
+templates/
+  app/        starter application copied by aether create
+server/       Go module: framework, reference server, migrations
+aether.config.json
+```
 
-### 3. A unified developer experience
+## Development
 
-One CLI that owns the whole loop.
+Install dependencies and build every workspace package:
 
-- `aether dev` — bundler and Go server behind a single port, with hot reload and
-  `/api` proxied to Go
-- `aether build` — bundle the client and embed it into the Go binary
-- `aether create` — scaffold an application from a maintained template
-- No CORS configuration in development, because there is only one origin
+```bash
+pnpm install
+pnpm build
+```
 
-### 4. Single-binary deployment
+Build the reference application and its binary:
 
-- `go build` produces the server with the client assets compiled in via `go:embed`
-- No Node runtime, no separate static host, no two-service deploys
-- Configuration lives in one `.env` file (or environment variables)
+```bash
+pnpm build:app
+./bin/aether
+```
+
+Start the reference application:
+
+```bash
+pnpm dev
+```
+
+`aether dev` bundles the client with esbuild, serves it on
+`http://localhost:3000`, proxies `/api/*` to the Go server on port `8080`, and
+reloads the browser when the client changes. Go and SQL changes restart the API
+process automatically.
+
+Start PostgreSQL for the reference server:
+
+```bash
+docker compose -f packages/core/infra/postgres/docker-compose.yaml up -d
+```
+
+Copy `server/.env` settings or provide environment variables directly. The
+reference server expects:
+
+```text
+DATABASE_URL=postgres://aether:aether_dev_password@localhost:5432/aether?sslmode=disable
+PORT=8080
+SESSION_COOKIE=aether_session
+SESSION_TTL=168h
+SESSION_SECURE=false
+CORS_ORIGIN=
+```
+
+## Creating an application
+
+```bash
+pnpm exec aether create myapp
+cd myapp
+pnpm install
+pnpm dev
+```
+
+The generated app contains:
+
+```text
+client/       TypeScript, JSX, and the application shell
+server/       Go entrypoint, handlers, framework, and migrations
+packages/     Local copies of @aether/core and @aether/cli
+aether.config.json
+```
+
+## Building a single binary
+
+```bash
+pnpm build
+```
+
+`aether build` bundles and minifies the client into the directory named by
+`outDir`, copies `client/index.html`, runs `go build`, and writes the executable
+named by `binary`. The Go server embeds those assets with `//go:embed`, so the
+result runs without Node installed.
+
+```bash
+./bin/myapp
+```
+
+## Client API
+
+### Components and state
+
+```tsx
+import { render, useState } from "@aether/core";
+
+function Counter() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <button onClick={() => setCount((value) => value + 1)}>
+      Count: {count}
+    </button>
+  );
+}
+
+render(<Counter />, document.getElementById("root")!);
+```
+
+State changes schedule a root re-render. Existing DOM nodes are patched instead
+of replaced, and keyed children keep their identity and state when reordered.
+
+### Effects
+
+```tsx
+import { useEffect, useState } from "@aether/core";
+
+function Account() {
+  const [email, setEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    fetch("/api/me")
+      .then((response) => response.json())
+      .then((account) => {
+        if (active) {
+          setEmail(account.email);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return <p>{email ?? "Loading..."}</p>;
+}
+```
+
+Effects run after the DOM is committed. Returning a function registers cleanup,
+which runs before the next effect execution and when the component unmounts.
+
+### Routing
+
+```tsx
+import { Link, Router, navigate } from "@aether/core";
+
+const routes = [
+  { path: "/", component: HomePage },
+  { path: "/users/:id", component: UserPage },
+  { path: "/files/*", component: FilesPage },
+];
+
+function App() {
+  return <Router routes={routes} fallback={<NotFound />} />;
+}
+
+navigate("/users/42");
+navigate("/", { replace: true });
+
+<Link to="/users/42">Open user</Link>;
+```
+
+The router uses the History API and listens for `popstate`. Route parameters are
+passed as props to the page component. Wildcard routes receive a `*` prop.
+
+### Mounting
+
+```ts
+import { render, unmount } from "@aether/core";
+
+render(<App />, container);
+unmount(container);
+```
+
+`unmount` removes the rendered tree and runs any registered effect cleanup.
+
+## Go API
+
+Create a server, register routes, and wrap the application in middleware:
+
+```go
+package main
+
+import (
+	"net/http"
+
+	"example.com/app/server/aether"
+)
+
+func main() {
+	app := aether.New()
+
+	app.Use(
+		aether.RequestID(),
+		aether.Logger(),
+		aether.Recover(),
+	)
+
+	app.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
+		aether.WriteJSON(w, http.StatusOK, map[string]string{
+			"status": "ok",
+		})
+	})
+
+	api := app.Group("/api")
+	api.Get("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := aether.Param(r, "id")
+		aether.WriteJSON(w, http.StatusOK, map[string]string{"id": id})
+	})
+
+	http.ListenAndServe(":8080", app.Handler())
+}
+```
+
+### Middleware
+
+Middleware can be attached to the application, a group, or a single route.
+Order is application first, then group, then route, then handler.
+
+```go
+app.Use(aether.RequestID(), aether.Logger(), aether.Recover())
+
+api := app.Group("/api", aether.RateLimit(60, time.Minute))
+api.Get("/me", handleMe, sessions.Require)
+```
+
+### Validation and errors
+
+```go
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (r LoginRequest) Validate() map[string]string {
+	fields := map[string]string{}
+
+	if r.Email == "" {
+		fields["email"] = "Email is required"
+	}
+
+	if r.Password == "" {
+		fields["password"] = "Password is required"
+	}
+
+	return fields
+}
+
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	request, err := aether.DecodeJSON[LoginRequest](w, r)
+
+	if err != nil {
+		aether.WriteError(w, err)
+		return
+	}
+
+	if err := aether.Validate(request); err != nil {
+		aether.WriteError(w, err)
+		return
+	}
+}
+```
+
+Errors have one JSON shape:
+
+```json
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "Validation failed",
+    "fields": {
+      "email": "Email is required"
+    }
+  }
+}
+```
+
+Unexpected errors are replaced with a generic 500 response.
+
+### Sessions and authentication
+
+```go
+sessions := aether.NewSessionManager(db, aether.SessionOptions{
+	CookieName: aether.Env("SESSION_COOKIE", "aether_session"),
+	TTL:        aether.EnvDuration("SESSION_TTL", 7*24*time.Hour),
+	Secure:     aether.EnvBool("SESSION_SECURE", false),
+})
+
+token, err := sessions.Create(r.Context(), userID)
+sessions.SetCookie(w, token)
+
+app.Get("/api/me", handleMe, sessions.Require)
+```
+
+Sessions are stored as SHA-256 token hashes, delivered in HTTP-only cookies, and
+checked against their expiry on every request. `sessions.Require` places the user
+ID in the request context. Read it with `aether.UserIDFromContext`.
+
+### Database and migrations
+
+```go
+db, err := aether.OpenDB(ctx, aether.Env("DATABASE_URL", ""))
+defer db.Close()
+
+if err := aether.Migrate(ctx, db, migrationFiles); err != nil {
+	return err
+}
+```
+
+Migrations are embedded with `//go:embed migrations/*.sql`. Applied files are
+recorded in `schema_migrations`. Use `aether.Transaction` for multi-statement
+writes:
+
+```go
+err := aether.Transaction(ctx, db, func(tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, "UPDATE accounts SET plan = $1 WHERE id = $2", "pro", id)
+	return err
+})
+```
+
+### Serving the SPA
+
+```go
+static, err := fs.Sub(clientAssets, "assets/dist")
+
+if err != nil {
+	return err
+}
+
+handler := aether.SPA(app.Handler(), static)
+```
+
+`aether.SPA` sends `/api` and `/api/*` to the Go handler. Existing files are
+served directly. Other GET requests fall back to `index.html` so client-side
+routes work on refresh.
+
+### Embedded assets
+
+```go
+//go:embed assets/dist/*
+var clientAssets embed.FS
+```
+
+The build writes the client bundle and `index.html` into `server/assets/dist`
+before invoking `go build`.
+
+## Configuration
+
+`aether.config.json` controls the CLI:
+
+```json
+{
+  "name": "myapp",
+  "clientEntry": "client/main.tsx",
+  "clientIndex": "client/index.html",
+  "publicDir": null,
+  "serverDir": "server",
+  "devPort": 3000,
+  "apiPort": 8080,
+  "outDir": "server/assets/dist",
+  "binary": "bin/myapp"
+}
+```
+
+CLI flags override ports:
+
+```bash
+aether dev --port 4000 --api-port 9000
+```
+
+Server configuration comes from environment variables. `aether.Env`,
+`aether.EnvBool`, `aether.EnvInt`, and `aether.EnvDuration` provide defaults for
+missing or invalid values.
+
+## Testing
+
+```bash
+pnpm test
+pnpm typecheck
+
+cd server
+go test ./...
+go vet ./...
+```
+
+Client tests use a small fake DOM and cover rendering, patching, keyed lists,
+events, controlled inputs, components, hooks, fragments, unmount, and routing.
+Go tests cover routing, groups, middleware order, JSON helpers, validation,
+errors, rate limiting, CORS, sessions, migrations splitting, and SPA fallback.
 
 ## Architecture
 
-**Development**
+Development:
 
-```
-Browser ──► aether dev (single port)
-              ├─► /api/*  ──► Go server (:8080)
-              └─► everything else ──► bundler (HMR)
-```
-
-**Production**
-
-```
-Browser ──► Go binary ──┬─► embedded client assets
-                        ├─► /api/* handlers
-                        └─► PostgreSQL
+```text
+Browser -> aether dev (single port)
+             |-> /api/*       -> Go server (:8080)
+             |-> /__aether_reload -> live reload SSE
+             |-> everything else  -> esbuild output
 ```
 
-Rules that keep the boundary clean:
+Production:
 
-- Client and server communicate **only** over HTTP/JSON. No hidden RPC or
-  compile-time bridging.
-- **Go owns** routing, authentication, data access, and static file serving.
-- **The client owns** rendering, navigation, and local UI state.
-
-## Target API
-
-**Client — TypeScript + JSX on the Aether runtime**
-
-```tsx
-import { useState } from "@aether/runtime";
-
-export function LoginForm() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(event: SubmitEvent) {
-    event.preventDefault();
-    const response = await fetch("/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!response.ok) setError("Invalid credentials");
-  }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <input value={email} onInput={(e) => setEmail(e.target.value)} />
-      <input
-        type="password"
-        value={password}
-        onInput={(e) => setPassword(e.target.value)}
-      />
-      {error && <p class="error">{error}</p>}
-      <button type="submit">Log in</button>
-    </form>
-  );
-}
+```text
+Browser -> Go binary
+             |-> embedded client assets
+             |-> /api/* handlers
+             |-> PostgreSQL
 ```
 
-**Server — Go**
-
-```go
-func main() {
-    app := aether.New(aether.Config{EnvPath: ".env"})
-
-    app.Use(aether.Logger())
-    app.Use(aether.Recover())
-
-    app.Post("/api/login", handlers.Login)
-    app.Get("/api/me", handlers.Me, aether.RequireSession())
-
-    app.Listen(":8080")
-}
-```
+Client and server communicate only over HTTP and JSON. Go owns routing,
+authentication, data access, migrations, and static serving. The client owns
+rendering, navigation, and local UI state.
 
 ## Design principles
 
-1. **Explicit over magic.** Every mechanism is visible in the code you write.
-2. **One deployable.** Production is a Go executable and a database.
-3. **A small surface area.** Features earn their place; nothing ships "just in case."
-4. **Language discipline.** TypeScript on the client, Go on the server. No
-   polyglot backend, no JavaScript on the server.
-5. **Learnable.** A developer should be productive in an afternoon.
-
-## Technology
-
-| Layer      | Choice                                                     |
-| ---------- | ---------------------------------------------------------- |
-| Client     | TypeScript, Aether runtime, JSX, Vite/esbuild for bundling |
-| Server     | Go, `net/http` with Go 1.22+ method routing                |
-| Database   | PostgreSQL via `pgx`                                       |
-| Auth       | bcrypt password hashes + HTTP-only cookie sessions         |
-| Tooling    | pnpm workspace, `go:embed`, GitHub Actions                 |
-
-## What v0.1 means
-
-Aether v0.1 is done when all of the following are true:
-
-- [ ] `aether create myapp && cd myapp && aether dev` boots a working app
-- [ ] A developer builds a login-protected page using components, props, and `useState`
-- [ ] The reconciler patches the DOM on state change, with working keyed lists
-- [ ] Authentication works against PostgreSQL with hashed passwords and sessions
-- [ ] Route groups and middleware run in the Go server framework
-- [ ] `aether build` produces one binary that runs with **no Node installed**
-- [ ] The reference application is covered by runtime tests and Go tests
-- [ ] CI enforces typecheck, tests, `go vet`, and a production build
+1. Explicit over magic.
+2. One deployable: a Go executable and a database.
+3. A small surface area.
+4. TypeScript on the client, Go on the server.
+5. Learnable in an afternoon.
 
 ## Non-goals
 
-- **A drop-in React replacement.** No `react-dom` compatibility or ecosystem parity.
-- **SSR inside Go for v1.** Aether starts as an SPA. Server rendering is a later
-  exploration, and will require either an embedded JS engine or a Node sidecar.
-- **Node or TypeScript backends.** The server is Go, by design.
-- **GraphQL, microservices, edge runtimes.** Not now; possibly never.
-
-## Repository layout (target)
-
-```
-packages/
-  runtime/     # client runtime: createElement, reconciler, hooks
-  cli/         # aether dev | build | create
-  templates/   # starter applications
-server/        # Go module: the framework and reference server
-playground/    # reference app used to validate the framework
-```
-
-## Roadmap
-
-The order is deliberate: the reconciler comes first because nothing else is
-meaningful without it.
-
-1. **Reconciler and hooks** — diffing, keyed lists, `useState`
-2. **Components and JSX** — function components, children, event normalization
-3. **Application shell** — client router, SPA fallback, data conventions
-4. **Server framework** — router groups, middleware, validation, auth, migrations
-5. **Toolchain** — `aether dev`, `aether build`, `go:embed` pipeline
-6. **Scaffolding and docs** — `aether create`, templates, CI, documentation
+- Drop-in React compatibility or ecosystem parity
+- Server rendering inside Go for v0.1
+- Node or TypeScript backends
+- GraphQL, microservices, and edge runtimes
 
 ## License
 

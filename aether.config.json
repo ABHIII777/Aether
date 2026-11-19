@@ -1,0 +1,11 @@
+{
+  "name": "aether",
+  "clientEntry": "packages/core/playground/main.js",
+  "clientIndex": "packages/core/playground/index.html",
+  "publicDir": null,
+  "serverDir": "server",
+  "devPort": 3000,
+  "apiPort": 8080,
+  "outDir": "server/assets/dist",
+  "binary": "bin/aether"
+}

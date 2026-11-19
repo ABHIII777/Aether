@@ -1,86 +1,68 @@
-import { render } from "../dist/dom.js";
-import { createElement } from "../dist/index.js";
-// test@aether.dev / secret123 -> Dummy credentails for login in
+import { createElement as h, render, useState } from "../dist/index.js";
 
-const handleFormSubmit = async (event) => {
-  event.preventDefault();
+function LoginForm() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState(null);
 
-  const { email, password } = event.currentTarget.elements;
+  async function handleSubmit(event) {
+    event.preventDefault();
 
-  const response = await fetch("http://localhost:8080/api/login", {
-    method: "POST",
-    headers: {
-      "Content-type": "application/json",
-    },
-    body: JSON.stringify({
-      email: email.value,
-      password: password.value,
+    const response = await fetch("/api/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      setMessage(data.message);
+      return;
+    }
+
+    setMessage(data.error?.message ?? "Unable to log in");
+  }
+
+  return h(
+    "form",
+    { class: "app", onSubmit: handleSubmit },
+    h("h1", {}, "Login Form"),
+    h("label", { for: "email" }, "Email:"),
+    h("input", {
+      id: "email",
+      type: "email",
+      name: "email",
+      placeholder: "Enter your email",
+      value: email,
+      required: true,
+      onInput: (event) => setEmail(event.target.value),
     }),
-  });
-
-  const data = await response.json()
-
-  document.getElementById("result")?.remove();
-  const result = document.createElement("p");
-  result.id = "result";
-  result.textContent = data.message;
-  document.querySelector(".app")?.appendChild(result);
-};
-
-const app = createElement(
-  "form",
-  { class: "app", onSubmit: handleFormSubmit },
-  createElement("h1", {}, "Login Form"),
-  createElement(
-    "label",
-    {
-      for: "email",
-    },
-    "Email:",
-  ),
-
-  createElement("input", {
-    id: "email",
-    type: "email",
-    name: "email",
-    placeholder: "Enter your email",
-    required: true,
-  }),
-
-  createElement("br", {}, ""),
-  createElement("br", {}, ""),
-
-  createElement(
-    "label",
-    {
-      for: "password",
-    },
-    "Password",
-  ),
-
-  createElement("input", {
-    id: "password",
-    name: "password",
-    type: "password",
-    placeholder: "Enter the password",
-    required: true,
-  }),
-
-  createElement("br", {}, ""),
-  createElement("br", {}, ""),
-
-  createElement(
-    "button",
-    {
-      type: "submit",
-    },
-    "Log in",
-  ),
-);
+    h("br"),
+    h("br"),
+    h("label", { for: "password" }, "Password"),
+    h("input", {
+      id: "password",
+      name: "password",
+      type: "password",
+      placeholder: "Enter the password",
+      value: password,
+      required: true,
+      onInput: (event) => setPassword(event.target.value),
+    }),
+    h("br"),
+    h("br"),
+    h("button", { type: "submit" }, "Log in"),
+    message ? h("p", { id: "result" }, message) : null,
+  );
+}
 
 const root = document.getElementById("root");
 
 if (!root) {
-  throw new Error("Aether could not find the root element...");
+  throw new Error("Aether could not find the root element");
 }
-render(app, root);
+
+render(h(LoginForm), root);

@@ -1,0 +1,18 @@
+{
+  "name": "__APP_NAME__",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "aether dev",
+    "build": "aether build",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aether/core": "file:packages/aether"
+  },
+  "devDependencies": {
+    "@aether/cli": "file:packages/cli",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}
