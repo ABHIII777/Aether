@@ -19,7 +19,7 @@ func Migrate(ctx context.Context, db *sql.DB, files fs.FS) error {
 		return fmt.Errorf("create migrations table: %w", err)
 	}
 
-	names, err := fs.Glob(files, "*.sql")
+	names, err := migrationNames(files)
 
 	if err != nil {
 		return fmt.Errorf("list migrations: %w", err)
@@ -76,6 +76,24 @@ func Migrate(ctx context.Context, db *sql.DB, files fs.FS) error {
 	}
 
 	return nil
+}
+
+func migrationNames(files fs.FS) ([]string, error) {
+	var names []string
+
+	err := fs.WalkDir(files, ".", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+			names = append(names, name)
+		}
+
+		return nil
+	})
+
+	return names, err
 }
 
 func statements(content string) []string {
