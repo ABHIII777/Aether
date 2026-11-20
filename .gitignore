@@ -8,6 +8,7 @@ templates/app/server/assets/dist/*
 !templates/app/server/assets/dist/index.html
 build/
 coverage/
+.aether/
 bin/
 .env
 .env.*
