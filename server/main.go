@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"errors"
 	"io/fs"
@@ -56,22 +57,7 @@ func run() error {
 		Secure:     aether.EnvBool("SESSION_SECURE", false),
 	})
 
-	app := aether.New()
-	app.Use(
-		aether.RequestID(),
-		aether.Logger(),
-		aether.Recover(),
-	)
-
-	if origin := aether.Env("CORS_ORIGIN", ""); origin != "" {
-		app.Use(aether.CORS(origin))
-	}
-
-	app.Get("/api/health", handleHealth)
-	app.Post("/api/register", handleRegister(db))
-	app.Post("/api/login", handleLogin(db, sessions))
-	app.Post("/api/logout", handleLogout(sessions))
-	app.Get("/api/me", handleMe(db), sessions.Require)
+	app := newApp(db, sessions)
 
 	static, err := fs.Sub(clientAssets, "assets/dist")
 
@@ -102,4 +88,25 @@ func run() error {
 	}
 
 	return nil
+}
+
+func newApp(db *sql.DB, session *aether.SessionManager) *aether.App{
+	app := aether.New()
+	app.Use(
+		aether.RequestID(),
+		aether.Logger(),
+		aether.Recover(),
+	)
+
+	if origin := aether.Env("CORS_ORIGIN", ""); origin != "" {
+		app.Use(aether.CORS(origin))
+	}
+
+	app.Get("/api/health", handleHealth)
+	app.Post("/api/register", handleRegister(db))
+	app.Post("/api/login", handleLogin(db, session))
+	app.Post("/api/logout", handleLogout(session))
+	app.Get("/api/me", handleMe(db), session.Require)
+
+	return app
 }
